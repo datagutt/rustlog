@@ -8,16 +8,16 @@ use anyhow::{anyhow, Context};
 use chrono::Utc;
 use lazy_static::lazy_static;
 use prometheus::{register_int_counter_vec, IntCounterVec};
+use std::collections::HashSet;
+use std::sync::Arc;
 use std::time::Duration;
-use tokio::{
-    sync::mpsc::{Receiver, Sender},
-    time::sleep,
-};
+use tokio::sync::Semaphore;
+use tokio::{sync::mpsc::Receiver, sync::mpsc::Sender, time::sleep};
 use tracing::{debug, error, info, log::warn, trace};
 use twitch_irc::{
     login::LoginCredentials,
     message::{AsRawIRC, IRCMessage, ServerMessage},
-    ClientConfig, SecureTCPTransport, TwitchIRCClient,
+    ClientConfig, MetricsConfig, SecureTCPTransport, TwitchIRCClient,
 };
 
 const CHANNEL_REJOIN_INTERVAL_SECONDS: u64 = 3600;
@@ -70,7 +70,20 @@ impl Bot {
         mut shutdown_rx: ShutdownRx,
         mut command_rx: Receiver<BotMessage>,
     ) {
-        let client_config = ClientConfig::new_simple(login_credentials);
+        let client_config = ClientConfig {
+            login_credentials,
+            max_channels_per_connection: 400,
+
+            max_waiting_messages_per_connection: 5,
+            time_per_message: Duration::from_millis(150),
+
+            connection_rate_limiter: Arc::new(Semaphore::new(1)),
+            new_connection_every: Duration::from_secs(2),
+            connect_timeout: Duration::from_secs(20),
+
+            metrics_config: MetricsConfig::default(),
+            tracing_identifier: None,
+        };
         let (mut receiver, client) = TwitchIRCClient::<SecureTCPTransport, C>::new(client_config);
 
         let app = self.app.clone();
