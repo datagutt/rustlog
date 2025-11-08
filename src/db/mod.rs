@@ -1,12 +1,13 @@
 mod migrations;
 pub mod schema;
 pub mod writer;
-use std::collections::HashSet;
-
 pub use migrations::run as setup_db;
 use serde::Deserialize;
+use std::collections::HashSet;
+use std::iter;
 use writer::FlushBuffer;
 
+use crate::bot::ChannelAction;
 use crate::{
     error::Error,
     logs::{
@@ -18,9 +19,12 @@ use crate::{
 };
 use chrono::{DateTime, Datelike, Duration, Utc};
 use clickhouse::{query::RowCursor, Client, Row};
+use dashmap::DashSet;
 use rand::{rng, seq::IteratorRandom};
 use schema::StructuredMessage;
+use tmi::common::JoinIter;
 use tracing::debug;
+use crate::db::schema::Channel;
 
 const CHANNEL_MULTI_QUERY_SIZE_DAYS: i64 = 14;
 
@@ -422,4 +426,64 @@ fn apply_limit_offset(query: &mut String, buffer_response: &FlushBufferResponse)
     if let Some(offset) = buffer_response.normalized_offset() {
         *query = format!("{query} OFFSET {offset}");
     }
+}
+
+pub async fn read_channels(db: &Client) -> Result<HashSet<String>> {
+    let channels = db
+        .query("SELECT channel_id FROM channel")
+        .fetch_all::<String>()
+        .await?;
+    Ok(HashSet::from_iter(channels))
+}
+
+pub async fn update_channels(
+    db: &Client,
+    channels: &[String],
+    action: ChannelAction,
+) -> Result<()> {
+    match action {
+        ChannelAction::Join => {
+            let mut insert = db.insert("channel")?;
+            for channel_id in channels.iter() {
+                insert.write(&Channel { channel_id: channel_id.clone() }).await?;
+            }
+            insert.end().await?;
+        }
+        ChannelAction::Part => {
+            for chunk in channels.chunks(100) {
+                let placeholders = iter::repeat('?').take(chunk.len()).join(", ");
+                let mut query = db.query(&format!("DELETE FROM channel WHERE channel_id IN ({placeholders})"));
+                for channel_id in chunk {
+                    query = query.bind(channel_id);
+                }
+                query.execute().await?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn read_opt_outs(db: &Client) -> Result<DashSet<String>> {
+    let opt_outs = db
+        .query("SELECT user_id FROM opt_out FINAL WHERE state")
+        .fetch_all::<String>()
+        .await?;
+
+    Ok(DashSet::from_iter(opt_outs))
+}
+
+pub async fn update_opt_out(db: &Client, user_id: &str, state: bool) -> Result<()> {
+    db.query(
+        "
+        INSERT INTO opt_out (user_id, state)
+        VALUES (?, ?)
+        ",
+    )
+    .bind(user_id)
+    .bind(state)
+    .execute()
+    .await?;
+
+    Ok(())
 }

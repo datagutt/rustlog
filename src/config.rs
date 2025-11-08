@@ -1,11 +1,9 @@
 use anyhow::Context;
-use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::{collections::HashSet, sync::RwLock};
 use tracing::info;
 
-const CONFIG_FILE_NAME: &str = "config.json";
+pub const CONFIG_FILE_NAME: &str = "config.json";
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,13 +16,10 @@ pub struct Config {
     pub clickhouse_flush_interval: u64,
     #[serde(default = "default_listen_address")]
     pub listen_address: String,
-    pub channels: RwLock<HashSet<String>>,
     #[serde(rename = "clientID")]
     pub client_id: String,
     pub client_secret: String,
     pub admins: Vec<String>,
-    #[serde(default)]
-    pub opt_out: DashMap<String, bool>,
     #[serde(rename = "adminAPIKey")]
     pub admin_api_key: Option<String>,
 }

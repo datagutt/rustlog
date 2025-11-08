@@ -77,7 +77,7 @@ impl Bot {
         let join_client = client.clone();
         tokio::spawn(async move {
             loop {
-                let channel_ids = app.config.channels.read().unwrap().clone();
+                let channel_ids = app.channels.read().await.clone();
 
                 let interval = match app
                     .get_users(Vec::from_iter(channel_ids), vec![], true)
@@ -205,7 +205,7 @@ impl Bot {
                 .unwrap_or_else(|| Utc::now().timestamp_millis().try_into().unwrap());
             let user_id = maybe_user_id.unwrap_or_default().to_owned();
 
-            if self.app.config.opt_out.contains_key(&user_id) {
+            if self.app.optout_users.contains(&user_id) {
                 return Ok(());
             }
 
@@ -297,41 +297,38 @@ impl Bot {
             return Err(anyhow!("no channels specified"));
         }
 
-        let channels = self
+        let (ids, logins) = self
             .app
             .get_users(
                 vec![],
                 channels.iter().map(ToString::to_string).collect(),
                 false,
             )
-            .await?;
+            .await?
+            .into_iter()
+            .unzip::<_, _, Vec<_>, Vec<_>>();
 
-        {
-            let mut config_channels = self.app.config.channels.write().unwrap();
+        self.app.update_channels(&ids, action).await?;
 
-            for (channel_id, channel_name) in channels {
-                match action {
-                    ChannelAction::Join => {
-                        info!("Joining channel {channel_name}");
-                        config_channels.insert(channel_id);
-                        client.join(channel_name)?;
-                    }
-                    ChannelAction::Part => {
-                        info!("Parting channel {channel_name}");
-                        config_channels.remove(&channel_id);
-                        client.part(channel_name);
-                    }
+        for login in logins {
+            match action {
+                ChannelAction::Join => {
+                    info!("Joining channel {login}");
+                    client.join(login)?;
+                }
+                ChannelAction::Part => {
+                    info!("Parting channel {login}");
+                    client.part(login);
                 }
             }
         }
-
-        self.app.config.save()?;
 
         Ok(())
     }
 }
 
-enum ChannelAction {
+#[derive(Clone, Copy)]
+pub enum ChannelAction {
     Join,
     Part,
 }

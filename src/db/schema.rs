@@ -562,6 +562,17 @@ fn extract_message_text(mut message_text: &str) -> &str {
     message_text
 }
 
+#[derive(Row, Serialize)]
+pub struct Channel {
+    pub channel_id: String,
+}
+
+#[derive(Row, Serialize)]
+pub struct OptOut {
+    pub user_id: String,
+    pub state: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{MessageType, StructuredMessage, UnstructuredMessage};

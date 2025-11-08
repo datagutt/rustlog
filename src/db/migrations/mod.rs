@@ -1,16 +1,18 @@
 mod migratable;
 mod structured;
 mod username_history;
+mod users;
 
 use crate::Result;
 use clickhouse::Client;
 use structured::StructuredMigration;
 use tracing::{debug, info};
 use username_history::UsernameHistoryMigration;
-
+use crate::config::Config;
+use crate::db::migrations::users::UserTablesMigration;
 use self::migratable::Migratable;
 
-pub async fn run(db: &Client, db_name: &str) -> Result<()> {
+pub async fn run(db: &Client, config: &Config) -> Result<()> {
     create_migrations_table(db).await?;
 
     run_migration(
@@ -71,9 +73,11 @@ String CODEC(ZSTD(10))
     )
     .await?;
 
-    run_migration(db, "6_structured_message", StructuredMigration { db_name }).await?;
+    run_migration(db, "6_structured_message", StructuredMigration { db_name: &config.clickhouse_db }).await?;
 
     run_migration(db, "7_username_history", UsernameHistoryMigration).await?;
+
+    run_migration(db, "7.5_user_tables", UserTablesMigration { config }).await?;
 
     Ok(())
 }
