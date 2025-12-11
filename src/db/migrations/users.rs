@@ -14,6 +14,7 @@ pub struct UserTablesMigration<'a> {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OldConfig {
+    #[serde(default)]
     channels: HashSet<String>,
     #[serde(default)]
     pub opt_out: DashMap<String, bool>,
