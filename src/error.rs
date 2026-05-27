@@ -71,32 +71,32 @@ impl OperationOutput for Error {
     fn inferred_responses(
         ctx: &mut aide::generate::GenContext,
         operation: &mut aide::openapi::Operation,
-    ) -> Vec<(Option<u16>, aide::openapi::Response)> {
+    ) -> Vec<(Option<aide::openapi::StatusCode>, aide::openapi::Response)> {
         if let Some(res) = Self::operation_response(ctx, operation) {
             vec![
                 (
-                    Some(400),
+                    Some(aide::openapi::StatusCode::Code(400)),
                     aide::openapi::Response {
                         description: "The request is invalid".to_owned(),
                         ..res.clone()
                     },
                 ),
                 (
-                    Some(403),
+                    Some(aide::openapi::StatusCode::Code(403)),
                     aide::openapi::Response {
                         description: "Channel or user has opted out".to_owned(),
                         ..res.clone()
                     },
                 ),
                 (
-                    Some(404),
+                    Some(aide::openapi::StatusCode::Code(404)),
                     aide::openapi::Response {
                         description: "The requested data was not found".to_owned(),
                         ..res.clone()
                     },
                 ),
                 (
-                    Some(500),
+                    Some(aide::openapi::StatusCode::Code(500)),
                     aide::openapi::Response {
                         description: "An internal server error occured".to_owned(),
                         ..res

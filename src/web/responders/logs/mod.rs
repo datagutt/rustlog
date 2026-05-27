@@ -120,9 +120,9 @@ impl OperationOutput for LogsResponse {
     fn inferred_responses(
         ctx: &mut aide::generate::GenContext,
         operation: &mut aide::openapi::Operation,
-    ) -> Vec<(Option<u16>, aide::openapi::Response)> {
+    ) -> Vec<(Option<aide::openapi::StatusCode>, aide::openapi::Response)> {
         let res = Self::operation_response(ctx, operation).unwrap();
 
-        vec![(Some(200), res)]
+        vec![(Some(aide::openapi::StatusCode::Code(200)), res)]
     }
 }
