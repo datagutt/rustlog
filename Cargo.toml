@@ -58,7 +58,11 @@ twitch_api = { git = "https://github.com/twitch-rs/twitch_api", rev = "585714ae8
     "reqwest",
     "twitch_oauth2",
 ] }
-tmi = { version = "0.10.0", default-features = false, features = ["simd"] }
+# Fork pinned for a TLS fix: TlsConfig::load skips individual invalid certs in
+# the system trust store instead of failing the whole load.
+tmi = { git = "https://github.com/ByteZ1337/tmi-rs", rev = "2024ea444209bb6217fb27462e7653225d195fcf", default-features = false, features = [
+    "simd",
+] }
 axum-prometheus = "0.10.0"
 metrics-prometheus = "0.11.1"
 axum-extra = { version = "0.12.6", features = ["typed-header"] }

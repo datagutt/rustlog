@@ -35,6 +35,13 @@ RUN RUSTFLAGS="$(cat /flags.txt)" cargo build --target "$(cat /target.txt)" --re
 RUN mv "./target/$(cat /target.txt)/release" "/output"
 
 FROM debian:bookworm-slim AS runtime
+# reqwest 0.13 (rustls) and tmi verify TLS against the system trust store, which
+# the slim image omits. Without it, twitch_api/tmi client creation panics with
+# "No CA certificates were loaded from the system".
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get update && \
+    apt-get install -yq --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 RUN useradd rustlog && mkdir /logs && chown rustlog: /logs
 COPY --from=builder /output/rustlog /usr/local/bin/
 USER rustlog
