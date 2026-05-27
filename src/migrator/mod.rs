@@ -104,7 +104,7 @@ impl Migrator {
                     let handle = tokio::spawn(async move {
                         let mut inserter = migrator
                             .db
-                            .inserter(MESSAGES_STRUCTURED_TABLE)?
+                            .inserter::<StructuredMessage<'static>>(MESSAGES_STRUCTURED_TABLE)
                             .with_timeouts(
                                 Some(Duration::from_secs(30)),
                                 Some(Duration::from_secs(180)),
@@ -265,7 +265,7 @@ async fn write_line<'a>(
                     // This is safe because despite the function signature,
                     // `inserter.write` only uses the value for serialization at the time of the method call, and not later
                     let msg: StructuredMessage<'static> = unsafe { std::mem::transmute(msg) };
-                    inserter.write(&msg)?;
+                    inserter.write(&msg).await?;
                 }
                 Err(err) => {
                     error!("Could not convert message {unstructured:?}: {err}");

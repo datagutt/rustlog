@@ -140,7 +140,9 @@ async fn write_chunk(db: &Client, buffer: &FlushBuffer) -> anyhow::Result<()> {
 
     let started_at = Instant::now();
 
-    let mut insert = db.insert(MESSAGES_STRUCTURED_TABLE)?;
+    let mut insert = db
+        .insert::<StructuredMessage<'static>>(MESSAGES_STRUCTURED_TABLE)
+        .await?;
     for message in messages_read_guard.iter() {
         insert.write(message).await.context("Could not write row")?;
     }

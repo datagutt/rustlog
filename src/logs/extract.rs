@@ -10,7 +10,7 @@ impl MessageWithTags for IRCMessage {
         self.tags
             .0
             .get(key.as_str())
-            .and_then(|value| value.as_deref())
+            .map(|value| value.as_str())
     }
 }
 

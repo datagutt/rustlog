@@ -378,9 +378,11 @@ pub async fn read_random_user_line(
         .bind(offset)
         .bind(channel_id)
         .bind(user_id)
-        .fetch_optional::<StructuredMessage>()
+        .fetch::<StructuredMessage<'static>>()?
+        .next()
         .await?
-        .ok_or(Error::NotFound)?;
+        .ok_or(Error::NotFound)?
+        .into_static();
 
     Ok(msg)
 }
@@ -414,9 +416,11 @@ pub async fn read_random_channel_line(
         .bind(channel_id)
         .bind(offset)
         .bind(channel_id)
-        .fetch_optional::<StructuredMessage>()
+        .fetch::<StructuredMessage<'static>>()?
+        .next()
         .await?
-        .ok_or(Error::NotFound)?;
+        .ok_or(Error::NotFound)?
+        .into_static();
 
     Ok(msg)
 }
@@ -616,7 +620,7 @@ pub async fn update_channels(
 ) -> Result<()> {
     match action {
         ChannelAction::Join => {
-            let mut insert = db.insert("channel")?;
+            let mut insert = db.insert::<Channel>("channel").await?;
             for channel_id in channels.iter() {
                 insert
                     .write(&Channel {

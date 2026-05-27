@@ -225,6 +225,43 @@ impl<'a> StructuredMessage<'a> {
         })
     }
 
+    /// Convert all borrowed fields into owned ones, producing a `'static` value.
+    ///
+    /// clickhouse 0.15 deserializes rows by borrowing from the cursor's read
+    /// buffer, so a row yielded by `RowCursor::next` only lives as long as that
+    /// buffer. We need owned `'static` messages to move them across the
+    /// stream/response boundary.
+    pub fn into_static(self) -> StructuredMessage<'static> {
+        fn own(value: Cow<'_, str>) -> Cow<'static, str> {
+            Cow::Owned(value.into_owned())
+        }
+
+        StructuredMessage {
+            channel_id: own(self.channel_id),
+            channel_login: own(self.channel_login),
+            timestamp: self.timestamp,
+            id: self.id,
+            message_type: self.message_type,
+            user_id: own(self.user_id),
+            user_login: own(self.user_login),
+            display_name: own(self.display_name),
+            color: self.color,
+            user_type: own(self.user_type),
+            badges: self.badges.into_iter().map(own).collect(),
+            badge_info: own(self.badge_info),
+            client_nonce: own(self.client_nonce),
+            emotes: own(self.emotes),
+            automod_flags: own(self.automod_flags),
+            text: own(self.text),
+            message_flags: self.message_flags,
+            extra_tags: self
+                .extra_tags
+                .into_iter()
+                .map(|(key, value)| (own(key), own(value)))
+                .collect(),
+        }
+    }
+
     pub fn user_friendly_text(&self) -> Cow<'_, str> {
         match self.message_type {
             MessageType::PrivMsg => Cow::Borrowed(extract_message_text(&self.text)),

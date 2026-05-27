@@ -70,6 +70,9 @@ impl Stream for MultiQueryStream {
 
                 match next_line_poll {
                     Poll::Ready(Ok(Some(msg))) => {
+                        // `msg` borrows the cursor (and thus `self.cursors`);
+                        // take ownership before touching `self` again.
+                        let msg = msg.into_static();
                         if let Some(offset) = self.offset {
                             if self.count < offset {
                                 return self.poll_next(cx);

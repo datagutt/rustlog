@@ -35,7 +35,10 @@ use chrono::{DateTime, Days, Months, NaiveDate, NaiveTime, Utc};
 use futures::{SinkExt, StreamExt};
 use lazy_static::lazy_static;
 use prometheus::{register_int_gauge, IntGauge};
-use rand::{distr::Alphanumeric, rng, Rng};
+use rand::{
+    distr::{Alphanumeric, Distribution},
+    rng,
+};
 use std::time::Duration;
 use tokio::sync::broadcast;
 use tracing::debug;
@@ -629,7 +632,9 @@ async fn firehose_socket(
 
 pub async fn optout(app: State<App>) -> Json<String> {
     let mut rng = rng();
-    let optout_code: String = (0..5).map(|_| rng.sample(Alphanumeric) as char).collect();
+    let optout_code: String = (0..5)
+        .map(|_| Alphanumeric.sample(&mut rng) as char)
+        .collect();
 
     app.optout_codes.insert(optout_code.clone());
 

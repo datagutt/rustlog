@@ -8,6 +8,7 @@ use dashmap::DashMap;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::fs;
+use tracing::warn;
 
 pub struct UserTablesMigration<'a> {
     pub config: &'a Config,
@@ -26,7 +27,7 @@ impl<'a> Migratable<'a> for UserTablesMigration<'a> {
     async fn run(&self, db: &'a clickhouse::Client) -> anyhow::Result<()> {
         db.query(
             "
-CREATE TABLE channel
+CREATE TABLE IF NOT EXISTS channel
 (
     channel_id String CODEC(ZSTD(8))
 )
@@ -39,7 +40,7 @@ ORDER BY channel_id;
 
         db.query(
             "
-CREATE TABLE opt_out
+CREATE TABLE IF NOT EXISTS opt_out
 (
     user_id String CODEC(ZSTD(8)),
     state UInt8 CODEC(ZSTD(1))
@@ -59,7 +60,7 @@ ORDER BY user_id;
             .context("Config deserialization error")?;
 
         if !channels.is_empty() {
-            let mut insert = db.insert("channel")?;
+            let mut insert = db.insert::<Channel>("channel").await?;
             for channel_id in channels.into_iter() {
                 insert.write(&Channel { channel_id }).await?;
             }
@@ -67,15 +68,20 @@ ORDER BY user_id;
         }
 
         if !opt_out.is_empty() {
-            let mut insert = db.insert("opt_out")?;
+            let mut insert = db.insert::<OptOut>("opt_out").await?;
             for (user_id, state) in opt_out.into_iter() {
                 insert.write(&OptOut { user_id, state }).await?;
             }
             insert.end().await?;
         }
 
-        // overwrite config to remove legacy properties
-        self.config.save()?;
+        // overwrite config to strip the now-migrated legacy `channels`/`optOut`
+        // keys. these values now live in the DB, and serde ignores unknown keys
+        // on load, so a read-only config (e.g. mounted ro in docker) leaving the
+        // stale keys behind is harmless. don't let it fail the migration.
+        if let Err(err) = self.config.save() {
+            warn!("Could not rewrite config to drop legacy keys: {err:#}");
+        }
 
         Ok(())
     }

@@ -15,7 +15,7 @@ anyhow = "1.0.75"
 axum = { version = "0.8.4", features = ["tokio"] }
 chrono = { version = "0.4.27", features = ["serde"] }
 clap = { version = "4.4.1", features = ["derive"] }
-clickhouse = { version = "0.13.0", default-features = false, features = [
+clickhouse = { version = "0.15.0", default-features = false, features = [
     "lz4",
     "uuid",
     "inserter",
@@ -28,19 +28,17 @@ indexmap = "2.2.6"
 lazy_static = "1.4.0"
 mimalloc = { version = "0.1.38", default-features = false }
 mime_guess = "2.0.4"
-prometheus = "0.13.3"
-rand = "0.9.0"
+prometheus = "0.14.0"
+rand = "0.10.1"
 rayon = "1.7.0"
-reqwest = { version = "0.12.4", features = [
-    "rustls-tls",
-], default-features = false }
+reqwest = { version = "0.13.4" }
 rust-embed = { version = "8.0.0", features = ["interpolate-folder-path"] }
 schemars = { version = "0.9", features = ["chrono04"] }
 serde = { version = "1.0.188", features = ["derive"] }
 serde_json = { version = "1.0.105", features = ["preserve_order"] }
 serde_repr = "0.1.16"
-strum = { version = "0.26.2", features = ["derive"] }
-thiserror = "1.0.47"
+strum = { version = "0.28.0", features = ["derive"] }
+thiserror = "2.0.18"
 tokio = { version = "1.32.0", features = ["sync", "signal", "rt-multi-thread"] }
 tower-http = { version = "0.6.1", features = [
     "trace",
@@ -50,24 +48,30 @@ tower-http = { version = "0.6.1", features = [
 ] }
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
-twitch-irc = { version = "5.0.1", default-features = false, features = [
+twitch-irc = { version = "6.0.0", default-features = false, features = [
     "metrics-collection",
     "transport-tcp-rustls-webpki-roots",
 ] }
-twitch_api = { version = "0.7.0", features = [
+twitch_api = { git = "https://github.com/twitch-rs/twitch_api", rev = "585714ae8d038d35051e8549d2629a0efb58f039", features = [
     "client",
     "helix",
     "reqwest",
     "twitch_oauth2",
 ] }
-tmi = { version = "0.7.0", default-features = false, features = ["simd"] }
-axum-prometheus = "0.8.0"
-metrics-prometheus = "0.8.0"
-axum-extra = { version = "0.10.0", features = ["typed-header"] }
+tmi = { version = "0.10.0", default-features = false, features = ["simd"] }
+axum-prometheus = "0.10.0"
+metrics-prometheus = "0.11.1"
+axum-extra = { version = "0.12.6", features = ["typed-header"] }
 bitflags = { version = "2.5.0", features = ["serde"] }
 
 [dev-dependencies]
 pretty_assertions = "1.4.0"
+
+# The pinned twitch_api git rev vendors an unpublished twitch_types (0.4.10),
+# but its twitch_oauth2 member still resolves twitch_types from crates.io (0.4.8),
+# producing two incompatible copies. Force everything onto the git version.
+[patch.crates-io]
+twitch_types = { git = "https://github.com/twitch-rs/twitch_api", rev = "585714ae8d038d35051e8549d2629a0efb58f039" }
 
 [profile.release]
 strip = true

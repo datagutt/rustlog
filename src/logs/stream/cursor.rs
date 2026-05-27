@@ -24,7 +24,13 @@ impl CursorStream {
     ) -> Result<Self> {
         let first_item = if buffer_response.is_empty() {
             // Prefetch the first row to check that the response is not empty
-            Some(cursor.next().await?.ok_or_else(|| Error::NotFound)?)
+            Some(
+                cursor
+                    .next()
+                    .await?
+                    .ok_or_else(|| Error::NotFound)?
+                    .into_static(),
+            )
         } else {
             None
         };
@@ -70,6 +76,9 @@ impl Stream for CursorStream {
 
         match poll_result {
             Poll::Ready(Ok(Some(msg))) => {
+                // `msg` borrows `self.cursor`; take ownership before touching
+                // `self` again so the borrow ends.
+                let msg = msg.into_static();
                 self.count += 1;
                 Poll::Ready(Some(Ok(vec![msg])))
             }
