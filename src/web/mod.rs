@@ -46,7 +46,15 @@ const CAPABILITIES: &[&str] = &[
 
 pub async fn run(app: App, mut shutdown_rx: ShutdownRx, bot_tx: Sender<BotMessage>) {
     aide::generate::on_error(|error| {
-        panic!("Could not generate docs: {error}");
+        // aide 0.16 surfaces these when an explicit response already covers a
+        // status the framework would otherwise infer (e.g. our Error type adds
+        // 400 while an extractor also infers 400). The explicit response wins,
+        // so this is benign; only panic on genuine doc-generation errors.
+        match error {
+            aide::Error::InferredResponseConflict(_)
+            | aide::Error::InferredDefaultResponseConflict => {}
+            error => panic!("Could not generate docs: {error}"),
+        }
     });
     aide::generate::infer_responses(true);
     aide::generate::extract_schemas(true);
