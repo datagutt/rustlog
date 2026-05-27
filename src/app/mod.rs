@@ -3,13 +3,14 @@ pub mod cache;
 use self::cache::UsersCache;
 use crate::{
     config::Config,
-    db::{delete_user_logs, writer::FlushBuffer},
+    db::{delete_user_logs, schema::StructuredMessage, writer::FlushBuffer},
     error::Error,
     Result,
 };
 use anyhow::Context;
 use dashmap::DashSet;
 use std::{collections::HashMap, sync::Arc};
+use tokio::sync::broadcast::Sender;
 use tracing::{debug, info};
 use twitch_api::{helix::users::GetUsersRequest, twitch_oauth2::AppAccessToken, HelixClient};
 
@@ -22,6 +23,7 @@ pub struct App {
     pub db: Arc<clickhouse::Client>,
     pub config: Arc<Config>,
     pub flush_buffer: FlushBuffer,
+    pub firehose_tx: Sender<StructuredMessage<'static>>,
 }
 
 impl App {

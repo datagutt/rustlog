@@ -19,6 +19,7 @@ use axum::{
     extract::Request,
     middleware::{self, Next},
     response::{IntoResponse, Response},
+    routing::any,
     Extension, Json, ServiceExt,
 };
 use axum_prometheus::PrometheusMetricLayerBuilder;
@@ -35,7 +36,13 @@ use tower_http::{
 };
 use tracing::{debug, info};
 
-const CAPABILITIES: &[&str] = &["arbitrary-range-query", "search", "stats", "namehistory"];
+const CAPABILITIES: &[&str] = &[
+    "arbitrary-range-query",
+    "search",
+    "stats",
+    "namehistory",
+    "firehose",
+];
 
 pub async fn run(app: App, mut shutdown_rx: ShutdownRx, bot_tx: Sender<BotMessage>) {
     aide::generate::on_error(|error| {
@@ -175,6 +182,7 @@ pub async fn run(app: App, mut shutdown_rx: ShutdownRx, bot_tx: Sender<BotMessag
         )
         .api_route("/optout", post(handlers::optout))
         .api_route("/capabilities", get(capabilities))
+        .route("/firehose", any(handlers::firehose))
         .route("/docs", Scalar::new("/openapi.json").axum_route())
         .route("/openapi.json", get(serve_openapi))
         .route("/assets/{*asset}", get(frontend::static_asset))

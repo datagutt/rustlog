@@ -1,4 +1,4 @@
-mod basic;
+pub(crate) mod basic;
 mod full;
 
 pub use basic::BasicMessage;

@@ -13,6 +13,7 @@ use super::ResponseMessage;
 pub struct BasicMessage<'a> {
     pub text: Cow<'a, str>,
     pub display_name: &'a str,
+    pub channel: &'a str,
     pub timestamp: DateTime<Utc>,
     pub id: Cow<'a, str>,
     pub tags: HashMap<&'a str, Cow<'a, str>>,
@@ -23,6 +24,7 @@ impl<'a> ResponseMessage<'a> for BasicMessage<'a> {
         Ok(Self {
             text: msg.user_friendly_text(),
             display_name: msg.display_name(),
+            channel: &msg.channel_login,
             timestamp: chrono::DateTime::from_timestamp_millis(msg.timestamp.try_into()?)
                 .context("Invalid timestamp")?,
             id: Cow::Owned(msg.id().unwrap_or_default()),

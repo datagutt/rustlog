@@ -27,7 +27,7 @@ use std::{
 };
 use tokio::{
     signal::unix::{signal, SignalKind},
-    sync::{mpsc, watch},
+    sync::{broadcast, mpsc, watch},
     time::timeout,
 };
 use tracing::{debug, info};
@@ -101,6 +101,8 @@ async fn run(config: Config, db: clickhouse::Client) -> anyhow::Result<()> {
     )
     .await?;
 
+    let (firehose_tx, _) = broadcast::channel(100);
+
     let app = App {
         helix_client,
         token: Arc::new(token),
@@ -109,6 +111,7 @@ async fn run(config: Config, db: clickhouse::Client) -> anyhow::Result<()> {
         db: Arc::new(db),
         optout_codes: Arc::default(),
         flush_buffer,
+        firehose_tx: firehose_tx.clone(),
     };
 
     let (bot_tx, bot_rx) = mpsc::channel(1);

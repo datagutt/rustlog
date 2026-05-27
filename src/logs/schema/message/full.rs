@@ -9,7 +9,6 @@ pub struct FullMessage<'a> {
     #[serde(flatten)]
     pub basic: BasicMessage<'a>,
     pub username: &'a str,
-    pub channel: &'a str,
     pub raw: String,
     #[schemars(with = "i8")]
     pub r#type: MessageType,
@@ -21,7 +20,6 @@ impl<'a> ResponseMessage<'a> for FullMessage<'a> {
         Ok(Self {
             basic,
             username: &msg.user_login,
-            channel: &msg.channel_login,
             raw: msg.to_raw_irc(),
             r#type: msg.message_type,
         })
@@ -58,6 +56,7 @@ mod tests {
                     "prasoc won 10 points in roulette and now has 2838 points! forsenPls",
                 ),
                 display_name: "Snusbot",
+                channel: "forsen",
                 timestamp: Utc.timestamp_millis_opt(1489263601000).unwrap(),
                 id: "".into(),
                 tags: [
@@ -78,7 +77,6 @@ mod tests {
             raw: "@tmi-sent-ts=1489263601000;room-id=22484632;user-id=62541963;display-name=Snusbot;badges=;badge-info=;flags=;user-type=;emotes= :snusbot!snusbot@snusbot.tmi.twitch.tv PRIVMSG #forsen :prasoc won 10 points in roulette and now has 2838 points! forsenPls".to_owned(),
             r#type: MessageType::PrivMsg,
             username: "snusbot",
-            channel: "forsen",
         };
 
         let mut expected_tags = expected_message.basic.tags.iter().collect::<Vec<_>>();

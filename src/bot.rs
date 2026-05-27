@@ -210,6 +210,7 @@ impl Bot {
             }
 
             let raw_irc = irc_message.as_raw_irc();
+
             let unstructured = UnstructuredMessage {
                 channel_id,
                 user_id: &user_id,
@@ -218,7 +219,9 @@ impl Bot {
             };
             match StructuredMessage::from_unstructured(&unstructured) {
                 Ok(msg) => {
-                    self.writer_tx.send(msg.into_owned()).await?;
+                    let owned_msg = msg.into_owned();
+                    self.app.firehose_tx.send(owned_msg.clone()).ok();
+                    self.writer_tx.send(owned_msg).await?;
                 }
                 Err(err) => {
                     error!("Could not convert message {unstructured:?} to be logged: {err}");

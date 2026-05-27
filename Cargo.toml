@@ -8,6 +8,7 @@ aide = { version = "0.15.0", features = [
     "axum",
     "axum-json",
     "axum-query",
+    "axum-ws",
     "scalar",
 ] }
 anyhow = "1.0.75"
