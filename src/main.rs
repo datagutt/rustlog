@@ -65,7 +65,13 @@ async fn main() -> anyhow::Result<()> {
     let mut db = clickhouse::Client::default()
         .with_url(&config.clickhouse_url)
         .with_database(&config.clickhouse_db)
-        .with_compression(clickhouse::Compression::None);
+        .with_compression(clickhouse::Compression::None)
+        // clickhouse 0.15 defaults to RowBinaryWithNamesAndTypes, which strictly
+        // validates every column's exact width/signedness against the row struct
+        // (e.g. it rejects reading DateTime64(3) into u64, or DateTime into i32).
+        // Our long-standing structs are byte-compatible but not type-exact, so use
+        // plain RowBinary like 0.13 did instead of retyping every query.
+        .with_validation(false);
 
     if let Some(user) = &config.clickhouse_username {
         db = db.with_user(user);
