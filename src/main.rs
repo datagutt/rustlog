@@ -75,8 +75,6 @@ async fn main() -> anyhow::Result<()> {
         db = db.with_password(password);
     }
 
-    let args = Args::parse();
-
     setup_db(&db, &config)
         .await
         .context("Could not run DB migrations")?;

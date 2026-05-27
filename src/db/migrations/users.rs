@@ -1,7 +1,9 @@
+use crate::args::Args;
 use crate::config::Config;
 use crate::db::migrations::migratable::Migratable;
 use crate::db::schema::{Channel, OptOut};
 use anyhow::Context;
+use clap::Parser;
 use dashmap::DashMap;
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -49,7 +51,9 @@ ORDER BY user_id;
         .execute()
         .await?;
 
-        let legacy_config = fs::read_to_string(crate::config::CONFIG_FILE_NAME)
+        let args = Args::try_parse();
+
+        let legacy_config = fs::read_to_string(&args.unwrap().config_path)
             .with_context(|| "Failed to load legacy config values")?;
         let OldConfig { channels, opt_out } = serde_json::from_str::<OldConfig>(&legacy_config)
             .context("Config deserialization error")?;
