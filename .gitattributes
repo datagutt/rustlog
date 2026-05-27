@@ -1,0 +1,17 @@
+# Normalize line endings to LF in the repository and on checkout.
+# Prevents Windows/WSL checkouts from rewriting every file with CRLF.
+* text=auto eol=lf
+
+# Explicit binary types so they are never line-ending normalized.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.gz binary
+*.zip binary
