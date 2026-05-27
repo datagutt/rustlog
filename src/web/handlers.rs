@@ -49,7 +49,7 @@ lazy_static! {
 }
 
 pub async fn get_channels(app: State<App>) -> impl IntoApiResponse {
-    let channel_ids = app.config.channels.read().unwrap().clone();
+    let channel_ids = app.channels.read().await.clone();
 
     let channels = app
         .get_users(Vec::from_iter(channel_ids), vec![], false)

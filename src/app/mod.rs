@@ -1,16 +1,22 @@
 pub mod cache;
 
 use self::cache::UsersCache;
+use crate::bot::ChannelAction;
 use crate::{
     config::Config,
-    db::{delete_user_logs, schema::StructuredMessage, writer::FlushBuffer},
+    db::{
+        delete_user_logs, schema::StructuredMessage, update_channels, update_opt_out,
+        writer::FlushBuffer,
+    },
     error::Error,
     Result,
 };
 use anyhow::Context;
 use dashmap::DashSet;
+use std::collections::HashSet;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::broadcast::Sender;
+use tokio::sync::RwLock;
 use tracing::{debug, info};
 use twitch_api::{helix::users::GetUsersRequest, twitch_oauth2::AppAccessToken, HelixClient};
 
@@ -19,7 +25,9 @@ pub struct App {
     pub helix_client: HelixClient<'static, reqwest::Client>,
     pub token: Arc<AppAccessToken>,
     pub users: UsersCache,
+    pub channels: Arc<RwLock<HashSet<String>>>,
     pub optout_codes: Arc<DashSet<String>>,
+    pub optout_users: Arc<DashSet<String>>,
     pub db: Arc<clickhouse::Client>,
     pub config: Arc<Config>,
     pub flush_buffer: FlushBuffer,
@@ -132,24 +140,44 @@ impl App {
             .await
             .context("Could not delete logs")?;
 
-        self.config.opt_out.insert(user_id.to_owned(), true);
-        self.config.save()?;
+        self.optout_users.insert(user_id.to_owned());
+        update_opt_out(&self.db, user_id, true)
+            .await
+            .context("Could not save opt-out state")?;
         info!("User {user_id} opted out");
 
         Ok(())
     }
 
     pub fn check_opted_out(&self, channel_id: &str, user_id: Option<&str>) -> Result<()> {
-        if self.config.opt_out.contains_key(channel_id) {
+        if self.optout_users.contains(channel_id) {
             return Err(Error::ChannelOptedOut);
         }
 
         if let Some(user_id) = user_id {
-            if self.config.opt_out.contains_key(user_id) {
+            if self.optout_users.contains(user_id) {
                 return Err(Error::UserOptedOut);
             }
         }
 
+        Ok(())
+    }
+
+    pub async fn update_channels(&self, channels: &[String], action: ChannelAction) -> Result<()> {
+        update_channels(&self.db, channels, action).await?;
+        {
+            let mut guard = self.channels.write().await;
+            for channel in channels {
+                match action {
+                    ChannelAction::Join => {
+                        guard.insert(channel.clone());
+                    }
+                    ChannelAction::Part => {
+                        guard.remove(channel);
+                    }
+                }
+            }
+        }
         Ok(())
     }
 }

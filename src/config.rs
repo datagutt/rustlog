@@ -1,8 +1,6 @@
 use anyhow::Context;
-use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::{collections::HashSet, sync::RwLock};
 use tracing::info;
 
 #[derive(Serialize, Deserialize)]
@@ -16,13 +14,10 @@ pub struct Config {
     pub clickhouse_flush_interval: u64,
     #[serde(default = "default_listen_address")]
     pub listen_address: String,
-    pub channels: RwLock<HashSet<String>>,
     #[serde(rename = "clientID")]
     pub client_id: String,
     pub client_secret: String,
     pub admins: Vec<String>,
-    #[serde(default)]
-    pub opt_out: DashMap<String, bool>,
     #[serde(rename = "adminAPIKey")]
     pub admin_api_key: Option<String>,
     #[serde(skip)]
@@ -41,7 +36,12 @@ impl Config {
     pub fn save(&self) -> anyhow::Result<()> {
         info!("Updating config");
         let json = serde_json::to_string_pretty(self)?;
-        fs::write(self.config_path.as_ref().expect("config path should always be available"), json)?;
+        fs::write(
+            self.config_path
+                .as_ref()
+                .expect("config path should always be available"),
+            json,
+        )?;
 
         Ok(())
     }

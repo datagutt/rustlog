@@ -25,6 +25,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use tokio::sync::RwLock;
 use tokio::{
     signal::unix::{signal, SignalKind},
     sync::{broadcast, mpsc, watch},
@@ -74,7 +75,9 @@ async fn main() -> anyhow::Result<()> {
         db = db.with_password(password);
     }
 
-    setup_db(&db, &config.clickhouse_db)
+    let args = Args::parse();
+
+    setup_db(&db, &config)
         .await
         .context("Could not run DB migrations")?;
 
@@ -103,13 +106,18 @@ async fn run(config: Config, db: clickhouse::Client) -> anyhow::Result<()> {
 
     let (firehose_tx, _) = broadcast::channel(100);
 
+    let channels = db::read_channels(&db).await?;
+    let opt_outs = db::read_opt_outs(&db).await?;
+
     let app = App {
         helix_client,
         token: Arc::new(token),
         users: UsersCache::default(),
         config: Arc::new(config),
         db: Arc::new(db),
+        channels: Arc::new(RwLock::new(channels)),
         optout_codes: Arc::default(),
+        optout_users: Arc::new(opt_outs),
         flush_buffer,
         firehose_tx: firehose_tx.clone(),
     };

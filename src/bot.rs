@@ -8,16 +8,16 @@ use anyhow::{anyhow, Context};
 use chrono::Utc;
 use lazy_static::lazy_static;
 use prometheus::{register_int_counter_vec, IntCounterVec};
+use std::collections::HashSet;
+use std::sync::Arc;
 use std::time::Duration;
-use tokio::{
-    sync::mpsc::{Receiver, Sender},
-    time::sleep,
-};
+use tokio::sync::Semaphore;
+use tokio::{sync::mpsc::Receiver, sync::mpsc::Sender, time::sleep};
 use tracing::{debug, error, info, log::warn, trace};
 use twitch_irc::{
     login::LoginCredentials,
     message::{AsRawIRC, IRCMessage, ServerMessage},
-    ClientConfig, SecureTCPTransport, TwitchIRCClient,
+    ClientConfig, MetricsConfig, SecureTCPTransport, TwitchIRCClient,
 };
 
 const CHANNEL_REJOIN_INTERVAL_SECONDS: u64 = 3600;
@@ -70,14 +70,27 @@ impl Bot {
         mut shutdown_rx: ShutdownRx,
         mut command_rx: Receiver<BotMessage>,
     ) {
-        let client_config = ClientConfig::new_simple(login_credentials);
+        let client_config = ClientConfig {
+            login_credentials,
+            max_channels_per_connection: 400,
+
+            max_waiting_messages_per_connection: 5,
+            time_per_message: Duration::from_millis(150),
+
+            connection_rate_limiter: Arc::new(Semaphore::new(1)),
+            new_connection_every: Duration::from_secs(2),
+            connect_timeout: Duration::from_secs(20),
+
+            metrics_config: MetricsConfig::default(),
+            tracing_identifier: None,
+        };
         let (mut receiver, client) = TwitchIRCClient::<SecureTCPTransport, C>::new(client_config);
 
         let app = self.app.clone();
         let join_client = client.clone();
         tokio::spawn(async move {
             loop {
-                let channel_ids = app.config.channels.read().unwrap().clone();
+                let channel_ids = app.channels.read().await.clone();
 
                 let interval = match app
                     .get_users(Vec::from_iter(channel_ids), vec![], true)
@@ -205,7 +218,7 @@ impl Bot {
                 .unwrap_or_else(|| Utc::now().timestamp_millis().try_into().unwrap());
             let user_id = maybe_user_id.unwrap_or_default().to_owned();
 
-            if self.app.config.opt_out.contains_key(&user_id) {
+            if self.app.optout_users.contains(&user_id) {
                 return Ok(());
             }
 
@@ -297,41 +310,38 @@ impl Bot {
             return Err(anyhow!("no channels specified"));
         }
 
-        let channels = self
+        let (ids, logins) = self
             .app
             .get_users(
                 vec![],
                 channels.iter().map(ToString::to_string).collect(),
                 false,
             )
-            .await?;
+            .await?
+            .into_iter()
+            .unzip::<_, _, Vec<_>, Vec<_>>();
 
-        {
-            let mut config_channels = self.app.config.channels.write().unwrap();
+        self.app.update_channels(&ids, action).await?;
 
-            for (channel_id, channel_name) in channels {
-                match action {
-                    ChannelAction::Join => {
-                        info!("Joining channel {channel_name}");
-                        config_channels.insert(channel_id);
-                        client.join(channel_name)?;
-                    }
-                    ChannelAction::Part => {
-                        info!("Parting channel {channel_name}");
-                        config_channels.remove(&channel_id);
-                        client.part(channel_name);
-                    }
+        for login in logins {
+            match action {
+                ChannelAction::Join => {
+                    info!("Joining channel {login}");
+                    client.join(login)?;
+                }
+                ChannelAction::Part => {
+                    info!("Parting channel {login}");
+                    client.part(login);
                 }
             }
         }
-
-        self.app.config.save()?;
 
         Ok(())
     }
 }
 
-enum ChannelAction {
+#[derive(Clone, Copy)]
+pub enum ChannelAction {
     Join,
     Part,
 }
