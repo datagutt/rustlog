@@ -31,7 +31,7 @@ use tokio::{
     sync::{broadcast, mpsc, watch},
     time::timeout,
 };
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use tracing_subscriber::EnvFilter;
 use twitch_api::{
     twitch_oauth2::{AppAccessToken, Scope},
@@ -42,6 +42,8 @@ use twitch_irc::login::StaticLoginCredentials;
 use crate::app::cache::UsersCache;
 
 const SHUTDOWN_TIMEOUT_SECONDS: u64 = 8;
+const DB_CONNECT_RETRY_COUNT: usize = 30;
+const DB_CONNECT_RETRY_INTERVAL_SECONDS: u64 = 2;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -81,9 +83,7 @@ async fn main() -> anyhow::Result<()> {
         db = db.with_password(password);
     }
 
-    setup_db(&db, &config)
-        .await
-        .context("Could not run DB migrations")?;
+    setup_db_with_retry(&db, &config).await?;
 
     match args.subcommand {
         None => run(config, db).await,
@@ -93,6 +93,35 @@ async fn main() -> anyhow::Result<()> {
             jobs,
         }) => migrate(db, source_dir, channel_id, jobs).await,
     }
+}
+
+/// Runs the migrations, retrying while ClickHouse is unreachable. Migrations are
+/// idempotent, so a connection blip during startup (e.g. ClickHouse restarting
+/// alongside us) should not crash the process into a restart loop.
+async fn setup_db_with_retry(db: &clickhouse::Client, config: &Config) -> anyhow::Result<()> {
+    for attempt in 1..=DB_CONNECT_RETRY_COUNT {
+        match setup_db(db, config).await {
+            Ok(()) => return Ok(()),
+            Err(err) if is_db_connection_error(&err) && attempt < DB_CONNECT_RETRY_COUNT => {
+                warn!(
+                    "ClickHouse unreachable, retrying migrations in {DB_CONNECT_RETRY_INTERVAL_SECONDS}s (attempt {attempt}/{DB_CONNECT_RETRY_COUNT}): {err}"
+                );
+                tokio::time::sleep(Duration::from_secs(DB_CONNECT_RETRY_INTERVAL_SECONDS)).await;
+            }
+            Err(err) => return Err(err).context("Could not run DB migrations"),
+        }
+    }
+
+    unreachable!("retry loop returns on the final attempt")
+}
+
+fn is_db_connection_error(err: &error::Error) -> bool {
+    matches!(
+        err,
+        error::Error::Clickhouse(
+            clickhouse::error::Error::Network(_) | clickhouse::error::Error::TimedOut
+        )
+    )
 }
 
 async fn run(config: Config, db: clickhouse::Client) -> anyhow::Result<()> {
@@ -115,7 +144,7 @@ async fn run(config: Config, db: clickhouse::Client) -> anyhow::Result<()> {
 
     let app = App {
         helix_client,
-        token: Arc::new(token),
+        token: Arc::new(RwLock::new(token)),
         users: UsersCache::default(),
         config: Arc::new(config),
         db: Arc::new(db),
@@ -139,6 +168,11 @@ async fn run(config: Config, db: clickhouse::Client) -> anyhow::Result<()> {
     let mut web_handle = tokio::spawn(web::run(app, shutdown_rx.clone(), bot_tx));
 
     tokio::select! {
+        // Poll the shutdown signal first: during a graceful shutdown the worker
+        // tasks also wind down, and an unbiased select would sometimes pick a
+        // finished task's arm and report a spurious "exited unexpectedly" error.
+        biased;
+
         _ = shutdown_rx.changed() => {
             debug!("Waiting for tasks to shut down");
 
