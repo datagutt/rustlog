@@ -10,6 +10,13 @@ use twitch_api::helix::ClientRequestError;
 pub enum Error {
     #[error("Twitch API error: {0}")]
     Helix(#[from] ClientRequestError<reqwest::Error>),
+    #[error("Twitch OAuth error: {0}")]
+    TwitchOauth(
+        #[from]
+        twitch_api::twitch_oauth2::tokens::errors::AppAccessTokenError<
+            twitch_api::client::CompatError<reqwest::Error>,
+        >,
+    ),
     #[error("IO Error: {0}")]
     Io(#[from] std::io::Error),
     #[error("Int parse error: {0}")]
@@ -31,7 +38,9 @@ pub enum Error {
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
         let status_code = match &self {
-            Error::Helix(_) | Error::Io(_) | Error::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::Helix(_) | Error::Io(_) | Error::Internal | Error::TwitchOauth(_) => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
             Error::Clickhouse(error) => {
                 error!("DB error: {error}");
                 StatusCode::INTERNAL_SERVER_ERROR
