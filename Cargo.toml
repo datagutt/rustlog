@@ -52,7 +52,7 @@ twitch-irc = { version = "6.0.0", default-features = false, features = [
     "metrics-collection",
     "transport-tcp-rustls-webpki-roots",
 ] }
-twitch_api = { git = "https://github.com/twitch-rs/twitch_api", rev = "585714ae8d038d35051e8549d2629a0efb58f039", features = [
+twitch_api = { version = "0.8.0", features = [
     "client",
     "helix",
     "reqwest",
@@ -70,12 +70,6 @@ bitflags = { version = "2.5.0", features = ["serde"] }
 
 [dev-dependencies]
 pretty_assertions = "1.4.0"
-
-# The pinned twitch_api git rev vendors an unpublished twitch_types (0.4.10),
-# but its twitch_oauth2 member still resolves twitch_types from crates.io (0.4.8),
-# producing two incompatible copies. Force everything onto the git version.
-[patch.crates-io]
-twitch_types = { git = "https://github.com/twitch-rs/twitch_api", rev = "585714ae8d038d35051e8549d2629a0efb58f039" }
 
 [profile.release]
 strip = true
