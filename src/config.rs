@@ -20,6 +20,12 @@ pub struct Config {
     pub admins: Vec<String>,
     #[serde(rename = "adminAPIKey")]
     pub admin_api_key: Option<String>,
+    /// IRC endpoint to connect to. Defaults to Twitch when unset; override to
+    /// point at a proxy or relay that speaks the Twitch IRC protocol.
+    #[serde(default)]
+    pub irc_server: Option<String>,
+    #[serde(default)]
+    pub irc_port: Option<u16>,
     #[serde(skip)]
     config_path: Option<std::path::PathBuf>,
 }

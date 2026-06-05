@@ -5,24 +5,74 @@ use crate::{
     ShutdownRx,
 };
 use anyhow::{anyhow, Context};
+use async_trait::async_trait;
 use chrono::Utc;
 use lazy_static::lazy_static;
 use prometheus::{register_int_counter_vec, IntCounterVec};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
+use tokio::net::TcpStream;
 use tokio::sync::Semaphore;
 use tokio::{sync::mpsc::Receiver, sync::mpsc::Sender, time::sleep};
 use tracing::{debug, error, info, log::warn, trace};
 use twitch_irc::{
     login::LoginCredentials,
     message::{AsRawIRC, IRCMessage, ServerMessage},
-    ClientConfig, MetricsConfig, SecureTCPTransport, TwitchIRCClient,
+    transport::tcp::{MakeConnection, TCPTransport, TCPTransportConnectError},
+    ClientConfig, MetricsConfig, TwitchIRCClient,
 };
 
 const CHANNEL_REJOIN_INTERVAL_SECONDS: u64 = 3600;
 const CHANENLS_REFETCH_RETRY_INTERVAL_SECONDS: u64 = 5;
 
-type TwitchClient<C> = TwitchIRCClient<SecureTCPTransport, C>;
+const TWITCH_IRC_SERVER: &str = "irc.chat.twitch.tv";
+const TWITCH_IRC_PORT: u16 = 6697;
+
+/// Server/port used for every IRC connection, set once at bot startup from config.
+/// twitch-irc bakes the endpoint into the transport type rather than the runtime
+/// `ClientConfig`, and `MakeConnection::new_socket` takes no arguments, so the
+/// only way to make it configurable is to stash the target here.
+static IRC_CONNECTION_CONFIG: OnceLock<(String, u16)> = OnceLock::new();
+
+/// TLS [`MakeConnection`] that dials the endpoint in [`IRC_CONNECTION_CONFIG`]
+/// instead of the hardcoded Twitch one. Mirrors twitch-irc's own webpki-roots TLS
+/// connector so it shares the same rustls/crypto provider already in the build.
+struct ConfigurableTLS;
+
+#[async_trait]
+impl MakeConnection for ConfigurableTLS {
+    type Socket = tokio_rustls::client::TlsStream<TcpStream>;
+
+    async fn new_socket() -> Result<Self::Socket, TCPTransportConnectError> {
+        use tokio_rustls::rustls::{pki_types::ServerName, ClientConfig, RootCertStore};
+        use tokio_rustls::TlsConnector;
+
+        let (server, port) = IRC_CONNECTION_CONFIG
+            .get()
+            .map(|(s, p)| (s.clone(), *p))
+            .unwrap_or_else(|| (TWITCH_IRC_SERVER.to_owned(), TWITCH_IRC_PORT));
+
+        let root_store = RootCertStore {
+            roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+        };
+        let config = ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
+
+        let connector = TlsConnector::from(Arc::new(config));
+        let domain = ServerName::try_from(server.clone()).map_err(|_| {
+            TCPTransportConnectError::IOError(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("invalid IRC server hostname: {server}"),
+            ))
+        })?;
+
+        let stream = TcpStream::connect((server.as_str(), port)).await?;
+        Ok(connector.connect(domain, stream).await?)
+    }
+}
+
+type TwitchClient<C> = TwitchIRCClient<TCPTransport<ConfigurableTLS>, C>;
 
 #[derive(Debug)]
 pub enum BotMessage {
@@ -69,6 +119,16 @@ impl Bot {
         mut shutdown_rx: ShutdownRx,
         mut command_rx: Receiver<BotMessage>,
     ) {
+        let server = self
+            .app
+            .config
+            .irc_server
+            .clone()
+            .unwrap_or_else(|| TWITCH_IRC_SERVER.to_owned());
+        let port = self.app.config.irc_port.unwrap_or(TWITCH_IRC_PORT);
+        info!("Connecting to IRC at {server}:{port}");
+        IRC_CONNECTION_CONFIG.set((server, port)).ok();
+
         let client_config = ClientConfig {
             login_credentials,
             max_channels_per_connection: 400,
@@ -83,7 +143,8 @@ impl Bot {
             metrics_config: MetricsConfig::default(),
             tracing_identifier: None,
         };
-        let (mut receiver, client) = TwitchIRCClient::<SecureTCPTransport, C>::new(client_config);
+        let (mut receiver, client) =
+            TwitchIRCClient::<TCPTransport<ConfigurableTLS>, C>::new(client_config);
 
         let app = self.app.clone();
         let join_client = client.clone();

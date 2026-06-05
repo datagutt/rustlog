@@ -2205,6 +2205,7 @@ version = "0.1.0"
 dependencies = [
  "aide",
  "anyhow",
+ "async-trait",
  "axum",
  "axum-extra",
  "axum-prometheus",
@@ -2234,12 +2235,14 @@ dependencies = [
  "thiserror 2.0.18",
  "tmi",
  "tokio",
+ "tokio-rustls",
  "tower-http",
  "tracing",
  "tracing-subscriber",
  "twitch-irc",
  "twitch_api",
  "uuid",
+ "webpki-roots",
 ]
 
 [[package]]
