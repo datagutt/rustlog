@@ -48,6 +48,46 @@ services:
 - Blazing fast log queries with response streaming and a [highly performant IRC parser](https://github.com/jprochazk/twitch-rs)
 - Support for ndjson logs responses
 
+## Admin API
+
+Rustlog exposes admin endpoints for managing the channels it logs. They are protected by the `adminAPIKey` set in your config file, which must be sent in the `X-Api-Key` header. If `adminAPIKey` is not configured, these endpoints are disabled.
+
+Channels can be specified by Twitch user id (`channels`) or by login name (`channel_names`). Both fields are optional and may be combined in a single request. Login names are resolved to ids automatically. Unknown, banned, or nonexistent logins are skipped rather than causing an error.
+
+### Add channels
+
+```
+POST /admin/channels
+X-Api-Key: <adminAPIKey>
+Content-Type: application/json
+
+{ "channel_names": ["forsen", "xqc"], "channels": ["12345"] }
+```
+
+### Remove channels
+
+```
+DELETE /admin/channels
+X-Api-Key: <adminAPIKey>
+Content-Type: application/json
+
+{ "channel_names": ["forsen", "xqc"] }
+```
+
+### Bulk import by username
+
+To import many channels at once, send a single request with all the login names. The example below builds the request body from a newline-delimited file (`names.txt`) using `jq`.
+
+```bash
+jq -R -s '{channel_names: (split("\n") | map(select(length>0)))}' names.txt \
+  | curl -X POST http://localhost:8025/admin/channels \
+      -H "X-Api-Key: $ADMIN_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d @-
+```
+
+Names are resolved against the Twitch Helix API in batches of 100. The channels themselves are joined over IRC sequentially, so a very large import will take some time to fully connect (subject to Twitch's join rate limits).
+
 ## Contributing
 
 Requirements:

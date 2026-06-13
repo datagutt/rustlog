@@ -64,16 +64,35 @@ pub fn admin_auth_doc(op: &mut TransformOperation) {
 #[derive(Deserialize, JsonSchema)]
 pub struct ChannelsRequest {
     /// List of channel ids
+    #[serde(default)]
     pub channels: Vec<String>,
+    /// List of channel login names
+    #[serde(default)]
+    pub channel_names: Vec<String>,
+}
+
+// The bot's join/part flow resolves login names to ids itself, so names are
+// forwarded as-is and only the id-keyed entries need resolving here.
+async fn resolve_channel_names(
+    app: &App,
+    channels: Vec<String>,
+    mut channel_names: Vec<String>,
+) -> Result<Vec<String>, Error> {
+    let users = app.get_users(channels, vec![], false).await?;
+    channel_names.extend(users.into_values());
+
+    Ok(channel_names)
 }
 
 pub async fn add_channels(
     Extension(bot_tx): Extension<Sender<BotMessage>>,
     app: State<App>,
-    Json(ChannelsRequest { channels }): Json<ChannelsRequest>,
+    Json(ChannelsRequest {
+        channels,
+        channel_names,
+    }): Json<ChannelsRequest>,
 ) -> Result<(), Error> {
-    let users = app.get_users(channels, vec![], false).await?;
-    let names = users.into_values().collect();
+    let names = resolve_channel_names(&app, channels, channel_names).await?;
 
     bot_tx.send(BotMessage::JoinChannels(names)).await.unwrap();
 
@@ -83,10 +102,12 @@ pub async fn add_channels(
 pub async fn remove_channels(
     Extension(bot_tx): Extension<Sender<BotMessage>>,
     app: State<App>,
-    Json(ChannelsRequest { channels }): Json<ChannelsRequest>,
+    Json(ChannelsRequest {
+        channels,
+        channel_names,
+    }): Json<ChannelsRequest>,
 ) -> Result<(), Error> {
-    let users = app.get_users(channels, vec![], false).await?;
-    let names = users.into_values().collect();
+    let names = resolve_channel_names(&app, channels, channel_names).await?;
 
     bot_tx.send(BotMessage::PartChannels(names)).await.unwrap();
 
